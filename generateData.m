@@ -1,12 +1,12 @@
 % To generate the SFNAll_2014
 SingleUnits_2014
-load('/ScriptsMatlab/Analysis_2014/pCorr3.mat')
+load('/Users/Huriye/Documents/Code/4x4training/info_data/pCoor_trained.mat')
 
 
 spikeFN = struct;
 spikeData = struct;
 ind = 1;
-for unt = 1: length(S_units)
+for unt = 1:length(S_units)
     animal = S_units{unt,1};
     pents  = S_units{unt,2};
     
@@ -23,20 +23,20 @@ for unt = 1: length(S_units)
             disp(['No unit animal:',num2str(animal),' site:',num2str(pents)])
         else
             if sh==1
-            path = ['/Volumes/HP Desktop Drive/Data/F0',num2str(animal),...
+            path = ['/Users/Huriye/Documents/Code/trainingInducedPlasticity/Data/F0',num2str(animal),...
                 '/P',sprintf('%02d',pents)];
             elseif sh==2
-                path = ['/Volumes/HP Desktop Drive/Data/F0',num2str(animal),...
+                path = ['/Users/Huriye/Documents/Code/trainingInducedPlasticity/Data/F0',num2str(animal),...
                 '/P',sprintf('%02d',pents),'b'];
             elseif sh==3
-                path = ['/Volumes/HP Desktop Drive/Data/F0',num2str(animal),...
+                path = ['/Users/Huriye/Documents/Code/trainingInducedPlasticity/Data/F0',num2str(animal),...
                 '/P',sprintf('%02d',pents),'c'];
             elseif sh==4
-                path = ['/Volumes/HP Desktop Drive/Data/F0',num2str(animal),...
+                path = ['/Users/Huriye/Documents/Code/trainingInducedPlasticity/Data/F0',num2str(animal),...
                 '/P',sprintf('%02d',pents),'d'];
             end
             
-            pt = dir([path,'/clusters.2014*']);
+            pt = dir(fullfile(path, 'clusters.2014*'));
             d = dir(fullfile(path,pt.name,'*data.mat'));
             
             for dd=1:length(d) % each unit/cluster
@@ -57,6 +57,12 @@ for unt = 1: length(S_units)
                 spikeFN(ind).xcoor     = pCoor(unt,ax);
                 spikeFN(ind).ycoor     = pCoor(unt,ay);
                 spikeFN(ind).field     = pCoor(unt,11);
+                
+                spikeData(ind).index    = ind;%index in spikefn, should be same
+                spikeData(ind).filename = spikeFN(ind).fileName;
+                spikeData(ind).spikes   = NaN;
+                spikeData(ind).stim     = NaN;
+
                 % load data
                 load([path,'/',pt.name,'/',d(dd).name]);
                 if size(data.set,2)==1 && size(data.set(1).stim_params,2)<2
@@ -67,11 +73,11 @@ for unt = 1: length(S_units)
                     % Recording error!
                 elseif size(data.set,2)>2
                     % Get the tone stim order and data
-                        stim=[];
-                        for ii=1:length(data.set)
-                       stim=[stim;data.set(ii).stim_params.Freq_Hz,...
-                           data.set(ii).stim_params.Azim_deg];
-                        end
+                     stim=[];
+                     for ii=1:length(data.set)
+                         stim=[stim;data.set(ii).stim_params.Freq_Hz,...
+                             data.set(ii).stim_params.Azim_deg];
+                     end
                     tDat=data.set(find(stim(:,1)~=-1)); 
                     vDat=data.set(find(stim(:,2)~=-1));
                     %add the BF
@@ -92,7 +98,7 @@ for unt = 1: length(S_units)
                     % Get the vowel data stim order
                     spikes=[];stim=[];
                     %first check the sweep lengths
-                    for ii=1:length(vDat);
+                    for ii=1:length(vDat)
                         sL(ii)=round(vDat(ii).length_signal_ms);
                     end
                     for ii=1:length(vDat)
@@ -107,20 +113,29 @@ for unt = 1: length(S_units)
                     end
                     [s,i]=sortrows(stim,[2,1,3,4]);%sort by stimulus type
                     Spikes=spikes(i,:);
+
                     % save event times and spikes in a different struct for future
                     % reference
-%                     spikedata(ind).index    = ind;%index in spikefn
-%                     spikedata(ind).filename = spikeFN(ind).fileName;
-%                     spikedata(ind).spikes   = Spikes;
-%                     spikedata(ind).stim     = stim;
+                    spikeData(ind).index    = ind;%index in spikefn
+                    spikeData(ind).filename = spikeFN(ind).fileName;
+                    spikeData(ind).spikes   = Spikes;
+                    spikeData(ind).stim     = stim;
                     
                     %Check whether it is driven, if so generate SSs values with ANOVA
                     resp=sum(Spikes(:,1:200),2);
                     spon=sum(Spikes(:,end-200),2);
+                    spikeFN(ind).resp = resp;
+                    spikeFN(ind).spon = spon;
+                    spikeFN(ind).stim = stim;
+                    spikeFN(ind).normalised = (resp-spon)./(resp+spon);
+                    spikeFN(ind).normalisedMean = (mean(Spikes(:,1:200),2)-mean(Spikes(:,end-200),2))./ (mean(Spikes(:,1:200),2) + mean(Spikes(:,end-200),2));
+
+
                     %run a ttest now to see if the difference in rate is ~= zero
                     [~,p] = ttest([resp-spon]);
                     spikeFN(ind).driven = p;
                     spikeFN(ind).pvaluesDriven = p;
+                    clear Data
                     if p<0.05
                         us=unique(stim,'rows');
                         for uu=1:length(us)
@@ -131,8 +146,9 @@ for unt = 1: length(S_units)
                         end
                         AnovaSSs_2014;
                     end
+                    ind = ind+1;
                 end
-                ind = ind+1;
+                
                 disp(['Animal:',num2str(animal),' Site:',num2str(pents),...
                     ' Sh:',num2str(sh),' ',num2str(dd),'/',num2str(size(d,1))])
             end
@@ -140,5 +156,7 @@ for unt = 1: length(S_units)
         end
     end
 end
-             save('/ScriptsMatlab/Analysis_2014/spikeFN_lastCorr_BFcorrected','spikeFN');
+trained_metrics = spikeFN;
+save('/Users/Huriye/Documents/Code/4x4training/info_data/trained_metrics','trained_metrics');
+save('/Users/Huriye/Documents/Code/4x4training/info_data/spikeData_trained','spikeData','-v7.3');
            

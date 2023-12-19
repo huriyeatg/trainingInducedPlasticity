@@ -1,8 +1,8 @@
-function plotBestFrequencyMaps ( save_path)
+function plotBestFrequencyMaps (save_path)
 % plots Best Frequency maps for trained as well as for control dataset
-
+warning('off', 'all')
 % H Atilgan
-
+setup_figprop;
 %% load extracted info
 % load trained metrics
 load trained_metrics
@@ -11,7 +11,7 @@ CoordinateCorrection
 load gpointsTrained
 
 %load control metrics used in Bizley et al., 09
-load control_metrics
+load control_metricsStatsMore
 %%  exclude nans, not significant units
 
 % For trained metrics
@@ -156,6 +156,7 @@ for k = 1:2 % BF maps for control & trained
     
 end
 
+close all
 % % for stats
 % X =[ BFtrained;BFControl];
 % group = [ fieldtrained, ones(size(fieldtrained,1),1) ; field, ones(size(field,1),1)*2];

@@ -4,7 +4,8 @@
 clear all
 clc
 setup_figprop
-root_path = '/Volumes/GoogleDrive/My Drive/Code/4x4training';
+root_path = 'C:\Users\Huriye\Documents\code\trainingInducedPlasticity';
+data_path = 'C:\Users\Huriye\Documents\code\trainingInducedPlasticity\info_data'
 fig_path   = fullfile(root_path, 'figs');
 
 %% Preprocessing:  To generate a structure that includes all metrics for all the figures below
@@ -13,7 +14,7 @@ generateMetricsForAllUnits
 %% Analyses for the project
 
 % check the info in training dataset
-info_check
+plot_PPF_Permutation (fig_path)
 
 % Normalised spike rate is missing - Figure Space C
 % Vowel pair variance explained figure is missing - Figure timbre E
@@ -41,3 +42,4 @@ depth % stats done!
 % For freq figure of vowels
 plot_vowelFormants(fig_path)
    
+

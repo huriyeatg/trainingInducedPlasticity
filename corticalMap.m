@@ -1,6 +1,6 @@
-function corticalMap( save_path)
-
-load control_metrics
+function corticalMap(backgroundImage_path, save_path)
+warning('off', 'all')
+load control_metricsStatsMore
 load PropsControl
 
 load trained_metrics
@@ -95,7 +95,7 @@ for dd =1:2 % control & trained
     
     %% Plot the figure
     figure
-    im = imread('backgroundImageForBFmaps.jpg');
+    im = imread(fullfile(backgroundImage_path,'backgroundImageForBFmaps.jpg'));
     
     clear vdata vy vx jj v c colormap jcmap
     vx=x;

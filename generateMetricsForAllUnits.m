@@ -11,7 +11,7 @@ function generateMetricsForAllUnits
 
 % load the information about the recording
 SingleUnits_2014 % load information about each recording, data recorded in 2014, that's why it is called 2014
-load(fullfile(root_path, 'pCoor_control.mat') );% load information about coordinates
+load(fullfile(root_path, 'pCoor_trained.mat') );% load information about coordinates
 
 %
 spikeFN = struct;
