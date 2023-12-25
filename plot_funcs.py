@@ -9,8 +9,7 @@ import statsmodels.api as sm
 from scipy import stats
 from scipy.io import loadmat
 import statsmodels.formula.api as smf
-
-
+import re
 import os
 
 
@@ -449,6 +448,7 @@ def plotValidationForMixedEffectModel (eng, ax):
     ax.barh(model_names, aic_values, color='k')
     ax.set_title('Model validation across different models ')
     ax.set_xlabel('AIC values reference to Full Model')
+
 def plotSRNormalisation (eng, featureType, axisAll):
     # Define the feature types and training groups
     if featureType == 'Space': # Space 0, F0 1, Timbre 2
@@ -515,40 +515,39 @@ def generateDataForGLMM(eng, featureType):
         featureInd = 1
     elif featureType == 'Timbre':
         featureInd = 2
-        
-    trainingGroups = ['Control', 'Timbre' ,'Pitch'] # label is different as Matlab/old code uses
-    fieldsName = ['A1', 'AAF', 'PPF', 'PSF']
+    
+    field_nameList = ['A1','AAF','PSF','PPF']
+    group_types = {1:'Control', 2:'Timbre', 3:'Pitch'} # label is different as Matlab/old code uses
+    group_names = ['Control', 'T 2AFC', 'T/P GNG']
     # these labels for training groups
     df = pd.DataFrame(columns=['trainingGroup','Unit', 'Field', 'Location', 'spike_rate'])
     data = []
-    for i, group_type in enumerate(trainingGroups):
+    for i, (group_code, group_type) in enumerate(group_types.items()):
         spikeData = eng.extractData(group_type, 'resp', 'True')
         matStim   = eng.extractData(group_type, 'stim', 'True')
-        field = np.array(eng.extractData(group_type, 'field'))
-        animal = np.array(eng.extractData(group_type, 'animal'))
-
-        for ii, field_type in enumerate(field):
+        fieldStim   = eng.extractData(group_type, 'field', 'False')
+        
+        for ii in range(len(spikeData)):
             spikeData_cell = np.array(spikeData[ii])
             matStim_cell   = np.array(matStim[ii]) 
-            if matStim_cell.size != 0 and field_type[0] <5:
+            if (matStim_cell.size != 0):
                 # Get unique subFeatures from matSti
-                subFeatures = np.unique(matStim_cell[:,featureInd])     
+                subFeatures = np.unique(matStim_cell[:,featureInd])   
                 for stim in subFeatures:
                     # Extract the normalized data for the current stimulus
                     current_data = np.nanmean(spikeData_cell[matStim_cell[:,featureInd] == stim])
-                    if not np.isnan(current_data):
-                        row = {'TrainingGroup': group_type, 
-                            'Unit' : ii +(i*1000), # Since all cells are from different animals, adding 1000 is to make sure they are different
-                            'Field': fieldsName[int(field_type[0])-1],
+                    if (not np.isnan(current_data)) & (fieldStim[ii]<5):
+                        row = {'TrainingGroup': group_names[i], 
+                            'Unit' : ii +(group_code*1000), # Since all cells are from different animals, adding 1000 is to make sure they are different
+                            'Field': field_nameList[int(fieldStim[ii])-1],
                             'Location': stim, 
                             'spike_rate': current_data}
                         data.append(row)
-               
     df = pd.DataFrame(data)
-    #df['Field'] = df['Field'].astype('category')
-    #df['TrainingGroup'] = df['TrainingGroup'].astype('category')
-    #df['TrainingGroup'].cat.reorder_categories(['Control', 'Timbre', 'Pitch'], ordered=True)
-    #df['TrainingGroup'].cat.set_categories(['Control', 'Timbre', 'Pitch'], ordered=True)
+    # df['Field'] = df['Field'].astype('category')
+    # df['TrainingGroup'] = df['TrainingGroup'].astype('category')
+    # df['TrainingGroup'].cat.reorder_categories(['Control', 'Timbre', 'Pitch'], ordered=True)
+    # df['TrainingGroup'].cat.set_categories(['Control', 'T 2AFC', 'T/P GNG'], ordered=True)
     df['Location'] = df['Location'].astype('category')
     df['Location'].cat.reorder_categories([-45, -15, 15, 45], ordered=True)
     df['Location'].cat.set_categories([-45, -15, 15, 45], ordered=True)
@@ -556,8 +555,9 @@ def generateDataForGLMM(eng, featureType):
 
 def plotCoefForGLMM ( eng, featureType, ax, savefigpath):
     df = generateDataForGLMM(eng, featureType)
+    print(df['TrainingGroup'].unique())
     # Define the GLM model with unit as a random effect
-    md = smf.mixedlm("spike_rate ~ C(Location, Treatment(-45)) * TrainingGroup + Field", 
+    md = smf.mixedlm("spike_rate ~ C(Location, Treatment(-45)) * TrainingGroup * Field", 
                     df, groups=df["Unit"])
     mdf = md.fit()
     print(mdf.summary())
@@ -574,24 +574,26 @@ def plotCoefForGLMM ( eng, featureType, ax, savefigpath):
     coef_df['var'] = coef_df.index
     coef_df = coef_df.reset_index(drop=True)
     coef_df['Coef.'] = pd.to_numeric(coef_df['Coef.'])
-    coef_df_filtered = coef_df[coef_df['var'].str.startswith('C(Location, Treatment(-45))')]
-
+    filter_conditions = ['TrainingGroup', 'Field']
+    coef_df_filtered = coef_df[coef_df['var'].str.startswith('C(Location, Treatment(-45))') & coef_df['var'].apply(lambda x: all(word in x for word in filter_conditions))]
+    coef_df_filtered['ylabel'] = coef_df_filtered['var'].apply(lambda x: re.findall('\[T\.(.*?)\]', x))
     # Create the coefficient plot
     sns.pointplot(x="Coef.", y="var", data=coef_df_filtered, 
-              color='k', join=False, ax=ax, 
-              capsize=0.2, # size of the error bar cap
-              errwidth=10,  # thickness of error bar line
-              ci=68,     # this will draw error bars for standard deviation
-              markers='d')
+                color='k', join=False, ax=ax, 
+                capsize=0.2, # size of the error bar cap
+                errwidth=10,  # thickness of error bar line
+                ci=68,     # this will draw error bars for standard deviation
+                markers='d')
     ax.axvline(0, color='grey', linestyle='--')  
     ax.set_xlabel("Coefficient")
+    ax.set_yticklabels(coef_df_filtered['ylabel'])
     ax.set_ylabel('')
-    ax.set_title(" GLMM coefficient values \nfor 'Location' categories")
+    ax.set_title(" GLMM coefficient values \nfor 'Location, Treatment (-45)' Interactions")
     
 def plotValidationForGLMM (eng, featureType, ax):
     df = generateDataForGLMM(eng, featureType)
         # Fit the full model
-    full_model = smf.mixedlm("spike_rate ~ C(Location, Treatment(-45)) * TrainingGroup + Field", 
+    full_model = smf.mixedlm("spike_rate ~ C(Location, Treatment(-45)) * TrainingGroup * Field", 
                             df, groups=df["Unit"]).fit(reml=False)
     # Fit reduced models with different combinations of variables and interactions
     reduced_model_1 = smf.mixedlm("spike_rate ~ C(Location) * TrainingGroup", 
@@ -602,13 +604,16 @@ def plotValidationForGLMM (eng, featureType, ax):
                                 df, groups=df["Unit"]).fit(reml=False)
     reduced_model_4 = smf.mixedlm("spike_rate ~ C(Location) * Field + TrainingGroup", 
                                 df, groups=df["Unit"]).fit(reml=False)
+    reduced_model_5 = smf.mixedlm("spike_rate ~ C(Location) + Field * TrainingGroup", 
+                                df, groups=df["Unit"]).fit(reml=False)
 
     # Collect AIC for each model
     aic_values = [full_model.aic, reduced_model_1.aic, reduced_model_2.aic, 
-                reduced_model_3.aic, reduced_model_4.aic]
+                reduced_model_3.aic, reduced_model_4.aic,  reduced_model_5.aic]
     aic_values = aic_values - full_model.aic
-    model_names = ['Full Model', 'Full Model Without Field ', 'Full Model Without Training Group',
-                 'Full Model Without Interactions','Full Model With Only Field Group Interactions']
+    model_names = ['Full Model', 'Full Model Without Field', 'Full Model Without Training Group',
+                 'Full Model Without Interactions','Full Model With Only Field Interactions',
+                 'Full Model With Only Training Group Interactions']
 
     # Plot AIC values
     ax.barh(model_names, aic_values, color='k')
