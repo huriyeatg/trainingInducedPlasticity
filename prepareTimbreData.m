@@ -14,6 +14,7 @@ elseif strcmp(trainingGroup, 'Control')
     dd = struct2cell(control_metrics);
     animalListSelected = unique(cell2mat(squeeze(dd(1,1,:))))';
     data = control_metrics;
+    data = arrayfun(@(x) setfield(x, 'shrank', x.PE(3)), data);
 elseif strcmp(trainingGroup, 'Pitch')
     animalListSelected = [848, 832];
     load trained_metrics;
@@ -40,15 +41,24 @@ end
 dat = cell(length(data), 7);
 % Process the data
 for k = 1:length(data)
-     currentData = data(k).SSRvaluesAll;
-    if  ~isempty(currentData) && ~any(isnan(currentData)) && (ismember(data(k).animal, animalListSelected))
-        dat{k,1}=data(k).UI(fea_index)*100;
-        dat{k,2}=data(k).AI(fea_index)*100;
-        dat{k,3}=data(k).EU(fea_index)*100;
-        dat{k,4}=data(k).EI(fea_index)*100;
-        dat{k,5}=data(k).EA(fea_index)*100;
-        dat{k,6}=data(k).AU(fea_index)*100;
-        dat{k, 7} = data(k).field;
+    if  ~isempty(data(k).EU)
+
+         currentData = [data(k).EU(fea_index), data(k).AI(fea_index),data(k).EA(fea_index),...
+             data(k).UI(fea_index),data(k).EI(fea_index),data(k).AU(fea_index)];
+         
+        if ~any(isnan(currentData)) && (ismember(data(k).animal, animalListSelected))
+            dat{k,1}=(data(k).UI(fea_index)*100) +1;
+            dat{k,2}=(data(k).AI(fea_index)*100) +1;
+            dat{k,3}=(data(k).EU(fea_index)*100) +1;
+            dat{k,4}=(data(k).EI(fea_index)*100) +1;
+            dat{k,5}=(data(k).EA(fea_index)*100) +1;
+            dat{k,6}=(data(k).AU(fea_index)*100) +1;
+            dat{k, 7} = data(k).field;
+            dat{k, 8} = data(k).shrank*data(k).animal;
+            if any(isnan(currentData))
+                disp(currentData)
+            end
+        end
     end
 end
 

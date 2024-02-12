@@ -18,6 +18,7 @@ elseif strcmp(trainingGroup, 'Control')
     dd = struct2cell(control_metrics);
     animalListSelected = unique(cell2mat(squeeze(dd(1,1,:))))';
     data = control_metrics;
+    data = arrayfun(@(x) setfield(x, 'shrank', x.PE(3)), data);
 elseif strcmp(trainingGroup, 'Pitch')
     animalListSelected = [848, 832];
     load trained_metrics;
@@ -35,6 +36,7 @@ end
 dat = cell(length(data), 1);
 % Process the data
 for k = 1:length(data)
+    data(k).shrankUnique = data(k).shrank*data(k).animal;
     if (ismember(data(k).animal, animalListSelected))
 
         % if strcmp(type, 'Timbre') || strcmp(type, 'Pitch')
