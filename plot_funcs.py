@@ -24,7 +24,8 @@ import itertools
 import rpy2.robjects as robjects
 from rpy2.robjects import pandas2ri, conversion
 from rpy2.robjects.packages import importr
-
+from scipy.interpolate import griddata
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 
@@ -70,16 +71,16 @@ def generateSSAdata (eng, range_name):
 
     # Define the fields and their corresponding codes in column 7 of the data
     fields = {1: 'A1', 2: 'AAF', 3: 'PPF', 4: 'PSF'}
-    group_types = {1:'Control', 2:'T 2AFC', 3:'T/P GNG'}
+    group_types = {1:'Control', 2:'T - Id', 3:'TP - Disc'}
 
     # Prepare data for boxplot for each field
     all_data = []
     for ind,(field_id, field_name) in enumerate(fields.items()):
         for k, (group_code, group_type) in enumerate(group_types.items()):
-            if group_type == 'T 2AFC':
+            if group_type == 'T - Id':
                 current_data = timbre_data[timbre_data[:, 6] == field_id, index]
                 penetrations = timbre_data[timbre_data[:, 6] == field_id, 7]
-            elif group_type == 'T/P GNG': 
+            elif group_type == 'TP - Disc': 
                 current_data = pitch_data[pitch_data[:, 6] ==field_id, index]
                 penetrations = pitch_data[pitch_data[:, 6] == field_id, 7]
             elif group_type == 'Control':
@@ -110,7 +111,9 @@ def plotSSAacrossfields (eng, range_name, ax):
     #ax.set_title(range_name)
     ax.set_ylabel(range_name +'\n(% Variance explained)')
     ax.set_xlabel('Cortical Field')
-    ax.legend(frameon=False)
+    #legend to right top sid
+    ax.legend(loc='upper right', bbox_to_anchor=(1, 1), frameon=False)
+    
 
 def crossvalidata (df,model_formula ):
 
@@ -176,7 +179,7 @@ def GLMMforSSA (eng, range_name):
     lmerTest = importr('lmerTest')
 
     # Define the mixed effects model formula
-    model_formula = 'Value ~ TrainingGroup * Field + (1|Unit) + (1|Penetration)'
+    model_formula = 'Value ~ TrainingGroup * Field + (1|Penetration)'
 
     # Fit the model using lmerTest
     md = lmerTest.lmer(model_formula, data=df)
@@ -224,11 +227,17 @@ def GLMMforSSA (eng, range_name):
 def plotBehaviorTimbre (axisAll):
     dataVowel = [ 85,90,87] # This data is from mean across all stim in this dataset: r'C:\Users\Huriye\Documents\code\trainingInducedPlasticity\info_data\behData_change detection.mat'
     ax = axisAll[0]
-    ax.plot(dataVowel, 's', color='m', markersize=10, markerfacecolor='none')
+    markers = ['+', 's', '^']  # Circle, Square, Triangle
+    # Plot each data point with a different marker
+    for i, value in enumerate(dataVowel):
+        ax.plot(i, value, marker=markers[i], color='m', markersize=10, markerfacecolor='none')
     ax.axhline(50, color='grey', linestyle='--')
     ax.set_xticks([0,1,2])
     ax.set_xticklabels([1,2,3])
     ax.set_ylim(20,100)
+    ax.set_ylabel('% Correct')
+    ax.set_xlabel( 'Subject')
+    ax.set_title('T - Id')
     ax.set_xlim(-0.5,2.5)
     ax.text(-0.4,21, 'n = 3', verticalalignment='bottom', horizontalalignment='left')
 
@@ -242,27 +251,29 @@ def plotBehaviorTimbre (axisAll):
     ax.set_xticklabels(['/i/','/u/','/$\epsilon$/'])
     ax.set_ylim(20,100)
     ax.set_xlim(-0.5,2.5)
-    ax.set_ylabel('Vowel identification\n(% Correct)')
+    ax.set_ylabel('% Correct')
+    ax.set_title('TP - Disc')
     ax.set_xlabel('Target Vowel')
     ax.text(-0.4, 26, 'n = 2', verticalalignment='bottom', horizontalalignment='left')
 
 def plotBehaviorPitch (axisAll):
     # Load .mat file
     ax = axisAll[0]
-    beh_data_path = r'C:\Users\Huriye\Documents\code\trainingInducedPlasticity\info_data\behData_change detection.mat'
+    beh_data_path = r'D:\trainingInducedPlasticity\info_data\behData_change detection.mat'
     mat = loadmat(beh_data_path)
     df = pd.DataFrame(mat['score'].T*100, columns=['Subject 1', 'Subject 2', 'Subject 3'])
     df['stim'] = mat['stim'][1,:-3].T
     df['mean_subjects'] = df[['Subject 1', 'Subject 2', 'Subject 3']].mean(axis=1)
 
     sns.lineplot(x='stim', y='mean_subjects', data=df, color = 'magenta', linewidth=2.5, ax = ax)
-    sns.scatterplot(x='stim', y='Subject 1', data=df, markers = 's',  color="magenta", size = 20, ax = ax)
-    sns.scatterplot(x='stim', y='Subject 2', data=df, markers = 's', color="magenta",size = 20, ax = ax)
-    sns.scatterplot(x='stim', y='Subject 3', data=df, markers = 's', color="magenta",size = 20, ax = ax)
+    sns.scatterplot(x='stim', y='Subject 1', data=df, marker = '+',  color="magenta", size= 200, ax = ax)
+    sns.scatterplot(x='stim', y='Subject 2', data=df, marker = 's', color="magenta",size = 200, ax = ax)
+    sns.scatterplot(x='stim', y='Subject 3', data=df, marker = '^', color="magenta",size = 200, ax = ax)
     ax.set_ylim([20, 100])
     ax.axhline(50, color='grey', linestyle='--')
-    ax.set_ylabel('Vowel identification\n(% Correct)')
+    ax.set_ylabel('% Correct')
     ax.set_xlabel('F0 (Hz)')
+    ax.set_title('T-Id')
     ax.legend_.remove()
     ax.text(140,21, 'n = 3', verticalalignment='bottom', horizontalalignment='left')
     
@@ -277,14 +288,15 @@ def plotBehaviorPitch (axisAll):
     ax.set_xticklabels(['336','556', '951'])
     ax.set_ylim(20,100)
     ax.set_xlim(-0.5,2.5)
-    ax.set_ylabel('F0 change detection\n(% Correct)')
+    ax.set_ylabel('% Correct')
+    ax.set_title('TP-Disc')
     ax.set_xlabel('F0 (Hz)')
     ax.text(-0.4, 26, 'n = 2', verticalalignment='bottom', horizontalalignment='left')
 
 def plotVowelSamples (axisAll):
     vowel_data_F = [(1551, 936), (2058, 730), (1105, 460), (2761, 437)]
     vowel_ids = ['a', '$\epsilon$', 'u', 'i']
-    colors_F = ['k', 'm', 'm', 'b']
+    colors_F = ['b', 'm', 'm', 'k']
     shapes_F = ['s', 'o', 'o', 'd']  # 's' for square, 'o' for circle
 
     # vowel plot
@@ -318,7 +330,7 @@ def plotVowelSamples (axisAll):
             delta_F1 = abs(F1_values[i] - F1_values[j])
             delta_F2 = abs(F2_values[i] - F2_values[j])
             ax.scatter(delta_F1, delta_F2, s=100, color= colors[colorInd], marker='s')
-            ax.text(delta_F1+90, delta_F2, f"/{vowel_ids[i]}-{vowel_ids[j]}/", fontsize=14, ha='center', va='center')
+            ax.text(delta_F1+ 110, delta_F2, f"/{vowel_ids[i]}-{vowel_ids[j]}/", fontsize=14, ha='center', va='center')
             colorInd += 1
     ax.set_xlim(-50, 650)
     ax.set_xticks(range(200, 601, 200))
@@ -355,14 +367,14 @@ def plotVowelSSA(eng,feature, ax):
         #  Timbre trained dataset
         df = pd.DataFrame()
         df['Value'] = timbre_data[:,indexOrderForVowels[j]]#[timbre_data[:, 6] == field_code, i]
-        df['Training Group'] = 'T 2AFC'
+        df['Training Group'] = 'T - Id'
         df['VowelPair'] = vowel
         box_data.append(df)
 
         # Pitch trained dataset
         df = pd.DataFrame()
         df['Value'] = pitch_data[:,indexOrderForVowels[j]]
-        df['Training Group'] = 'T/P GNG'
+        df['Training Group'] = 'TP - Disc'
         df['VowelPair'] = vowel
         box_data.append(df)
 
@@ -371,8 +383,8 @@ def plotVowelSSA(eng,feature, ax):
     all_data['Training Group_VowelPair'] = all_data['Training Group'] + '_' + all_data['VowelPair']
     color_palettes = {
     'Control': sns.color_palette("Greys", len(vowels)),
-    'T 2AFC': sns.light_palette('magenta', n_colors=len(vowels)),
-    'T/P GNG': sns.light_palette('b', n_colors=len(vowels))}
+    'T - Id': sns.light_palette('magenta', n_colors=len(vowels)),
+    'TP - Disc': sns.light_palette('b', n_colors=len(vowels))}
 
     unique_fields = all_data['VowelPair'].unique()
 
@@ -406,9 +418,9 @@ def plotVowelSSAacrossTrainingGroups(eng,group_name, ax):
     fields = {1: 'A1', 2: 'AAF', 3: 'PPF', 4: 'PSF'}
 
     if group_name == 'Timbre':
-        trainingGroups_title = 'T 2AFC'
+        trainingGroups_title = 'T - Id'
     elif group_name == 'Pitch':
-            trainingGroups_title = 'T/P GNG'
+            trainingGroups_title = 'TP - Disc'
     elif group_name == 'Control':
             trainingGroups_title = 'Control'
     
@@ -433,8 +445,8 @@ def plotVowelSSAacrossTrainingGroups(eng,group_name, ax):
 
     color_palettes = {
         'Control': sns.color_palette("Greys", len(vowels)),
-        'T 2AFC': sns.light_palette('magenta', len(vowels)),
-        'T/P GNG': sns.light_palette('b', len(vowels))}
+        'T - Id': sns.light_palette('magenta', len(vowels)),
+        'TP - Disc': sns.light_palette('b', len(vowels))}
 
     unique_vowels= all_data['Vowel'].unique()
 
@@ -598,7 +610,6 @@ def generateDataValuesForGLMM_timbreSSA(eng):
 
     # Concatenate all dataframes
     df = pd.DataFrame(all_data)
-    print(all_data)
     return df
 
 def generatePredictionDataForGLMM_timbre(eng):
@@ -617,8 +628,8 @@ def generatePredictionDataForGLMM_timbre(eng):
     md = lmerTest.lmer(model_formula, data=df)
 
     # Generate a range of values for F1 and F2
-    f1_values = np.linspace(min(df['F1']), max(df['F1']), num=200)
-    f2_values = np.linspace(min(df['F2']), max(df['F2']), num=200)
+    f1_values = np.linspace(min(df['F1']), max(df['F1']), num=400)
+    f2_values = np.linspace(min(df['F2']), max(df['F2']), num=400)
     fields = df['Field'].unique()
     training_groups = df['TrainingGroup'].unique()
 
@@ -649,7 +660,7 @@ def plotPrediction2d(eng, axisAll):
 
     colors = {'Control': 'gray', 'Timbre': 'magenta', 'Pitch': 'blue'}
     trainingGroups = ['Control', 'Timbre' ,'Pitch'] 
-    trainingGroups_title = ['Control', 'T 2AFC' ,'T/P GNG']
+    trainingGroups_title = ['Control', 'T - Id' ,'TP - Disc']
     # Plot the F1 
     ax = axisAll[0]
     binSize = 4
@@ -676,16 +687,25 @@ def plotPrediction2d(eng, axisAll):
         for f1_unique in f1.unique():
             # Filter pvalues based on unique f1_values
             filtered_pvalues = pvalues[new_data['F1'] == f1_unique]
-            
+            # Define the window size for the moving average
+            window_size = 1
+
+            # Calculate the simple moving average
+            smoothed_pvalues = filtered_pvalues.rolling(window=window_size, center=True,min_periods=1).mean()
+            # Handle NaNs at the edges by using min_periods=1
+            # smoothed_pvalues = filtered_pvalues.rolling(window=window_size, center=True, min_periods=1).mean()
+            #ax.plot(smoothed_pvalues.index, smoothed_pvalues, color=colors[training_group],
+            #            label=trainingGroups_title[i], marker='.', markersize=4)
             ax.plot(f1_unique, np.mean(filtered_pvalues), marker='.', 
-                    color=colors[training_group] , label=trainingGroups_title[i],
-                    markersize= 4)
+                       color=colors[training_group] , label=trainingGroups_title[i],
+                     markersize= 4)
 
     ax.set_ylim ( 0, 22)
     ax.set_xlim(0, 600)
     ax.set_xticks(range(0, 601, 200))
     ax.set_xlabel('$\Delta$ F1 (Hz)')
     ax.set_ylabel('Predicted Change in\nDiscriminability')
+
     # Plot the F2
     ax = axisAll[1]
     for i, training_group in enumerate(trainingGroups):
@@ -696,10 +716,15 @@ def plotPrediction2d(eng, axisAll):
         for f2_unique in f2.unique():
             # Filter pvalues based on unique f1_values
             filtered_pvalues = pvalues[new_data['F2'] == f2_unique]
-            
+            window_size = 1
+            smoothed_pvalues = filtered_pvalues.rolling(window=window_size, center=True,min_periods=1).mean()
+ 
             ax.plot(f2_unique, np.mean(filtered_pvalues), marker='.', 
-                    color=colors[training_group] , label=trainingGroups_title[i],
-                    markersize=4)
+                   color=colors[training_group] , label=trainingGroups_title[i],
+                   markersize=4)
+            #ax.plot(filtered_pvalues.index, np.mean(filtered_pvalues), label='Original', marker='o')
+            # ax.plot(smoothed_pvalues.index, smoothed_pvalues,color=colors[training_group],
+            #             label=trainingGroups_title[i], marker='.', markersize=4)
 
     ax.set_ylim ( 0, 22)
     ax.set_xlim(0, 2000)
@@ -708,12 +733,12 @@ def plotPrediction2d(eng, axisAll):
     ax.set_xlabel('$\Delta$ F2 (kHz)')
     ax.set_yticklabels([])
 
-def plotPrediction3d(eng, axisAll):
+def plotPrediction3d(eng, axisAll, coloraxis):
     new_data = generatePredictionDataForGLMM_timbre(eng)
 
     colors = {'Control': 'gray', 'Timbre': 'magenta', 'Pitch': 'blue'}
     trainingGroups = ['Control', 'Timbre' ,'Pitch'] 
-    trainingGroups_title = ['Control', 'T 2AFC' ,'T/P GNG']
+    trainingGroups_title = ['Control', 'T - Id' ,'TP - Disc']
     zmax = [ 30, 20, 10]
 
     for i, training_group in enumerate(trainingGroups):
@@ -721,21 +746,31 @@ def plotPrediction3d(eng, axisAll):
         group_data = new_data[new_data['TrainingGroup'] == training_group]
         
         ax = axisAll[i]
+        # Assuming you have a DataFrame 'df' with columns 'F1', 'F2', and 'values' you wish to interpolate
+        f1_values = np.linspace(min(group_data['F1']), max(group_data['F1']), num=400)
+        f2_values = np.linspace(min(group_data['F2']), max(group_data['F2']), num=400)
+
+        grid_x, grid_y = np.meshgrid(f1_values, f2_values)
+        grid_z = griddata((group_data['F1'], group_data['F2']), group_data['predicted_values'], (grid_x, grid_y), method='cubic')
         
-        ax.plot_trisurf(group_data['F1'], group_data['F2'], group_data['predicted_values'],
-                        color=colors[training_group], label=f'Training Group {training_group}')
-        #ax.scatter(group_data['F1'], group_data['F2'], group_data['predicted_values'], color=colors[training_group], 
-         #         label=f'Training Group {training_group}', s = 2)
-        ax.set_xlabel('$\Delta$ F1 (Hz)',fontsize='medium')
-        ax.set_ylabel('$\Delta$ F2 (kHz)',fontsize='medium')
-        #ax.set_zlim(0, zmax[i])
-        ax.set_zlabel('Predicted Change',fontsize='medium')
+        im = ax.pcolormesh(grid_x, grid_y, grid_z, shading='auto', cmap='viridis')  # Choose a colormap that fits your data
+        
+        #ax.plot_trisurf(group_data['F1'], group_data['F2'], group_data['predicted_values'],
+        #                color=colors[training_group], label=f'Training Group {training_group}')
+        ax.set_xlabel('$\Delta$ F1 (Hz)')
         ax.set_title(trainingGroups_title[i])
-        ax.zaxis.set_rotate_label(True)
+        #ax.zaxis.set_rotate_label(True)
         ax.tick_params(axis='x', labelsize='medium')
-        ax.tick_params(axis='y', labelsize='medium')
-        ax.yaxis.labelpad = 10  # Increase the padding between the y-axis label and the plot
-        
+        if i == 0:
+            ax.tick_params(axis='y', labelsize='medium')
+            ax.set_ylabel('$\Delta$ F2 (kHz)')
+            ax.yaxis.labelpad = 10  # Increase the padding between the y-axis label and the plot
+        else:
+            ax.set_yticklabels([])
+            # add color bar 
+            cbar = plt.colorbar(im, cax=coloraxis)
+            cbar.set_label('Predicted Change\nin Discriminability', rotation=270, labelpad=20)
+            cbar.ax.tick_params(labelsize='medium')
 def GLMM_timbreSSA (eng, savefigpath):
     df = generateDataValuesForGLMM_timbreSSA(eng)
     # Activate R
@@ -808,7 +843,7 @@ def plotSRNormalisation (eng, featureType, axisAll):
         featureInd = 2
     trainingGroups = ['Control', 'Timbre' ,'Pitch'] # label is different as Matlab/old code uses
     # these labels for training groups
-    trainingGroups_title = ['Control', 'T 2AFC' ,'T/P GNG']
+    trainingGroups_title = ['Control', 'T - Id' ,'TP - Disc']
 
     # Create a figure and axis for plotting
     markers = { 'Control': 's-', 'Timbre': 'o-', 'Pitch': 'd-',}
@@ -867,7 +902,7 @@ def generateDataForGLMM_spikeData(eng, featureType):
     
     field_nameList = ['A1','AAF','PSF','PPF']
     group_types = {1:'Control', 2:'Timbre', 3:'Pitch'} # label is different as Matlab/old code uses
-    group_names = ['Control', 'T 2AFC', 'T/P GNG']
+    group_names = ['Control', 'T - Id', 'TP - Disc']
     # these labels for training groups
     df = pd.DataFrame(columns=['trainingGroup','Unit', 'Field', 'Location', 'spike_rate'])
     data = []
@@ -955,7 +990,7 @@ def plotCoefForGLMM_spikeData ( eng, featureType, ax, savefigpath):
     filter_conditions = ['TrainingGroup', 'Field']
     coef_df_filtered = coef_df[coef_df.index.str.startswith('Location') & coef_df.index.to_series().apply(lambda x: all(word in x for word in filter_conditions))]
     coef_df_filtered['ylabel'] = coef_df_filtered.index.to_series().apply(
-    lambda x: ' '.join(filter(None, [item for sublist in re.findall(r'Location(-?\d+)|TrainingGroup([A-Za-z/\s\d]+)|Field([A-Za-z]+)', x) for item in sublist])))
+    lambda x: ' '.join(filter(None, [item for sublist in re.findall(r'Location(-?\d+)|TrainingGroup\s*[\W_]*\s*((?:T - Id|TP - Disc))|Field([A-Za-z]+)', x) for item in sublist])))
 
     # Create the coefficient plot
     sns.pointplot(x="Estimate", y="ylabel", data=coef_df_filtered, 
