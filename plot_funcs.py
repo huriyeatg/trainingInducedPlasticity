@@ -59,7 +59,7 @@ def save_figure(name, base_path):
     plt.savefig(os.path.join(base_path, f'{name}.png'), 
                 bbox_inches='tight', transparent=False, dpi = 300)
     plt.savefig(os.path.join(base_path, f'{name}.svg'), 
-               bbox_inches='tight', transparent=True)
+               bbox_inches='tight', transparent=True, format='svg')
 
 def generateSSAdata (eng, range_name):
     timbre_data = np.array(eng.prepareSSAData('Timbre', nargout=1))
@@ -80,12 +80,15 @@ def generateSSAdata (eng, range_name):
             if group_type == 'T - Id':
                 current_data = timbre_data[timbre_data[:, 6] == field_id, index]
                 penetrations = timbre_data[timbre_data[:, 6] == field_id, 7]
+                bf           = timbre_data[timbre_data[:, 6] == field_id, 8]
             elif group_type == 'TP - Disc': 
                 current_data = pitch_data[pitch_data[:, 6] ==field_id, index]
                 penetrations = pitch_data[pitch_data[:, 6] == field_id, 7]
+                bf           = pitch_data[pitch_data[:, 6] == field_id, 8]
             elif group_type == 'Control':
                 current_data = control_data[control_data[:, 6] == field_id, index]
                 penetrations = control_data[control_data[:, 6] == field_id, 7]
+                bf           = control_data[control_data[:, 6] == field_id, 8]
             
             for ii,c_dd  in enumerate(current_data):
                     row = {'TrainingGroup': group_type, 
@@ -93,6 +96,7 @@ def generateSSAdata (eng, range_name):
                         'Field': field_name,
                         'Value': c_dd,
                         'Penetration':penetrations[ii],
+                        'BF':bf[ii],
                         }
                     all_data.append(row)
     df = pd.DataFrame(all_data)
@@ -114,7 +118,6 @@ def plotSSAacrossfields (eng, range_name, ax):
     #legend to right top sid
     ax.legend(loc='upper right', bbox_to_anchor=(1, 1), frameon=False)
     
-
 def crossvalidata (df,model_formula ):
 
     # Enable automatic conversion from pandas to R
@@ -223,6 +226,49 @@ def GLMMforSSA (eng, range_name):
         subset = df[df['Field'] == field]
         posthoc = pairwise_tukeyhsd(subset['Value'], subset['TrainingGroup'])
         print(f"Post-hoc comparison for Field within {field}:\n{posthoc}\n")
+        
+def GLMMforSSA_withBF (eng, range_name):
+    
+    # Model 1:  This looks at vowel pairs
+    # df = generateDataValuesForGLMM_timbreSSA(eng)
+    # model_formula = 'Value ~ Field + TrainingGroup + F1 + F2 + BF + TrainingGroup:F1 + TrainingGroup:F2 + Field:F1 + Field:F2 + F1:F2 +BF:F1 + BF:F2 +F1:F2:BF + (1|Unit) + (1|Penetration)'
+    # Model 2: This looks at individual vowels
+    df = generateSSAdata(eng, range_name)
+    model_formula = 'Value ~ TrainingGroup * BF * Field + (1|Penetration)'
+   
+
+    pandas2ri.activate()
+    # Import R packages
+    performance = importr('performance')
+    lmerTest = importr('lmerTest')
+
+   # 
+
+    # Fit the model using lmerTest
+    md = lmerTest.lmer(model_formula, data=df)
+
+    # Print the summary
+    #print(robjects.r['summary'](md))
+
+    md_summary = robjects.r['coef'](md)
+    fixed_effects = md_summary[0]
+    fixed_effect_names = fixed_effects.names[:]
+
+    coef_df = pd.DataFrame(robjects.r['summary'](md).rx2('coefficients'))
+    coef_df.columns = ['Estimate', 'Std. Error', 'df', 't value', 'Pr(>|t|)']
+    coef_df.index = fixed_effect_names
+    print(coef_df)
+
+    # Calculate R-squared values in R
+    r2_values = performance.r2(md)
+
+    # Extract R-squared values
+    marginal_r2 = r2_values[0]
+    conditional_r2 = r2_values[1]
+
+    print("AIC", marginal_r2)
+    print("Marginal R-squared:", marginal_r2)
+    print("Conditional R-squared:", conditional_r2)
         
 def plotBehaviorTimbre (axisAll):
     dataVowel = [ 85,90,87] # This data is from mean across all stim in this dataset: r'C:\Users\Huriye\Documents\code\trainingInducedPlasticity\info_data\behData_change detection.mat'
@@ -340,9 +386,9 @@ def plotVowelSamples (axisAll):
     ax.set_xlabel('$\Delta$ F1 (Hz)')
     ax.set_ylabel('$\Delta$ F2 (kHz)')
 
-def plotVowelSSA(eng,feature, ax):
+def plotVowelSSA(eng,feature, ax, indexOrder = 'F2'):
     
-    ax = ax[0]
+    ax = ax
     # Get data from Matlab structure in numpy arrays
     timbre_data  = np.array(eng.prepareTimbreData('Timbre',feature, nargout=1))
     pitch_data   = np.array(eng.prepareTimbreData('Pitch',feature, nargout=1))
@@ -351,12 +397,19 @@ def plotVowelSSA(eng,feature, ax):
     # Define the fields and their corresponding codes in column 7 of the data
     vowels = {1: 'AU', 2: 'AE', 3: 'EI', 4: 'EU', 5: 'AI', 6: 'UI'}
     #real_vowelIDs = {1: 'UI', 2: 'AI', 3: 'EU', 4: 'EI', 5: 'AE', 6: 'AU'}
-    indexOrderForVowels = [5,4,3,2,1,0]
+    indexOrderForVowels = [5,4,2,3,1,0] # for vowels
+    training_group_order = ['Control', 'T - Id', 'TP - Disc']
+    if indexOrder == 'F2':
+        vowel_order = ['AU', 'AE', 'EU', 'EI', 'AI', 'UI']  # F2 decreasing order
+    else:
+        vowel_order = ['UI', 'AE', 'EU', 'EI', 'AI', 'AU']  # F1 decreasing order
+
     # We will collect the box plot data and positions here
     box_data = []
 
     # Prepare data for boxplot for each field
-    for j, (field_code, vowel) in enumerate(vowels.items()):
+    for vowel in vowel_order:
+        j = list(vowels.values()).index(vowel)
         # Control dataset
         df = pd.DataFrame()
         df['Value'] = control_data[:,indexOrderForVowels[j]]#[control_data[:, 6] == field_code, i]
@@ -380,7 +433,9 @@ def plotVowelSSA(eng,feature, ax):
 
     # Concatenate all dataframes
     all_data = pd.concat(box_data)
+    # Create the hue_order for Training Group_VowelPair
     all_data['Training Group_VowelPair'] = all_data['Training Group'] + '_' + all_data['VowelPair']
+
     color_palettes = {
     'Control': sns.color_palette("Greys", len(vowels)),
     'T - Id': sns.light_palette('magenta', n_colors=len(vowels)),
@@ -394,13 +449,20 @@ def plotVowelSSA(eng,feature, ax):
     color_dict = dict(zip(all_data['Training Group_VowelPair'], all_data['Color']))
 
     # Plot the boxplot using seaborn
-    sns.boxplot(x='Training Group', y='Value', hue='Training Group_VowelPair', data=all_data, palette=color_dict, ax=ax, showfliers=False )
+    sns.boxplot(x='Training Group', y='Value', hue='Training Group_VowelPair', data=all_data,
+                palette=color_dict, 
+                ax=ax, showfliers=False )
+                                # hue_order=vowel_order,
     #sns.swarmplot(x='Type', y='Value', hue='Type_Field', data=all_data, palette=color_dict, ax=ax, size = 3, dodge=True)
 
     #handles, labels = ax.get_legend_handles_labels()
     #order = list(range(0, 18, 3)) + list(range(1, 18, 3)) + list(range(2, 18, 3))
     #ax.legend([handles[idx] for idx in order],[labels[idx] for idx in order], ncol=3, frameon=False)
     ax.legend_.remove()
+    # Optionally adjust the x-axis to make it more compact
+    ax.set_xticks(range(len(training_group_order)))
+    ax.set_xticklabels(training_group_order)
+
     # Set the y-axis label
     ax.set_ylabel('Timbre\n(% Variance explained)')
     #ax.set_xticklabels(['/a-u/','/a-e/','/e-i/','/e-u/','/i-a/','/i-u/'])
@@ -587,13 +649,16 @@ def generateDataValuesForGLMM_timbreSSA(eng):
             for k, (group_code, group_type) in enumerate(group_types.items()):
                 if group_type == 'Timbre':
                     current_data = timbre_data[timbre_data[:, 6] == field_id, j]
-                    penetrations = timbre_data[timbre_data[:, 6] == field_id, 6]
+                    penetrations = timbre_data[timbre_data[:, 6] == field_id, 7]
+                    bf           = timbre_data[timbre_data[:, 6] == field_id, 8]
                 elif group_type == 'Pitch': 
                     current_data = pitch_data[pitch_data[:, 6] ==field_id, j]
-                    penetrations = pitch_data[pitch_data[:, 6] == field_id, 6]
+                    penetrations = pitch_data[pitch_data[:, 6] == field_id, 7]
+                    bf           = pitch_data[pitch_data[:, 6] == field_id, 8]
                 elif group_type == 'Control':
                     current_data = control_data[control_data[:, 6] == field_id, j]
                     penetrations = control_data[control_data[:, 6] == field_id, 7]
+                    bf           = control_data[control_data[:, 6] == field_id, 8]
 
                 for ii,c_dd  in enumerate(current_data):
                     if not np.isnan(c_dd):
@@ -605,6 +670,7 @@ def generateDataValuesForGLMM_timbreSSA(eng):
                             'F2' : delta_F[pairs[vowel_code-1]][1],
                             'Value': c_dd,
                             'Penetration':penetrations[ii],
+                            'BF': bf[ii],
                             }
                         all_data.append(row)
 
@@ -771,6 +837,7 @@ def plotPrediction3d(eng, axisAll, coloraxis):
             cbar = plt.colorbar(im, cax=coloraxis)
             cbar.set_label('Predicted Change\nin Discriminability', rotation=270, labelpad=20)
             cbar.ax.tick_params(labelsize='medium')
+
 def GLMM_timbreSSA (eng, savefigpath):
     df = generateDataValuesForGLMM_timbreSSA(eng)
     # Activate R
@@ -803,7 +870,7 @@ def GLMM_timbreSSA (eng, savefigpath):
     print(f"Cross-validated RMSE: {crossValidateValue:.2f}")
 
 def plotValidationForMixedEffectModel (eng, ax):
-    df = generateDataValuesForGLMM_timbre(eng)
+    df = generateDataValuesForGLMM_timbreSSA(eng)
         # Fit the full model
     formula = "Value ~ Field + TrainingGroup + F1 + F2 + TrainingGroup:Field + TrainingGroup:F1 + TrainingGroup:F2 + Field:F1 + Field:F2 + F1:F2 + TrainingGroup:F1:F2:Field"
     full_model = smf.glm(formula, df,family=sm.families.Poisson(), groups=df["Unit"]).fit(reml=False)

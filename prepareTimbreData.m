@@ -15,6 +15,14 @@ elseif strcmp(trainingGroup, 'Control')
     animalListSelected = unique(cell2mat(squeeze(dd(1,1,:))))';
     data = control_metrics;
     data = arrayfun(@(x) setfield(x, 'shrank', x.PE(3)), data);
+    for i = 1:length(data)
+        if isfield(data(i), 'bf') && ~isempty(data(i).bf) && numel(data(i).bf) >= 1
+            data(i).BF = data(i).bf(1);  % Set 'BF' to the first element of 'bf'
+        else
+            data(i).BF = NaN;  % Set 'BF' to NaN if 'bf' doesn't exist or is empty
+        end
+    end
+
 elseif strcmp(trainingGroup, 'Pitch')
     animalListSelected = [848, 832];
     load trained_metrics;
@@ -55,6 +63,7 @@ for k = 1:length(data)
             dat{k,6}=(data(k).AU(fea_index)*100) +1;
             dat{k, 7} = data(k).field;
             dat{k, 8} = data(k).shrank*data(k).animal;
+            dat{k, 9} = data(k).BF;
             if any(isnan(currentData))
                 disp(currentData)
             end
